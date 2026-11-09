@@ -1,0 +1,605 @@
+﻿
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VIRAT AI</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #101114;
+    color: white;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.sidebar {
+    width: 270px;
+    background: #191a20;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #30313a;
+}
+
+.logo {
+    font-size: 25px;
+    font-weight: bold;
+    margin-bottom: 25px;
+    color: #8b9cff;
+}
+
+.new-chat {
+    background: #30313a;
+    color: white;
+    border: 1px solid #555;
+    padding: 13px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 15px;
+}
+
+.new-chat:hover { background: #41434f; }
+
+.history-title {
+    color: #999;
+    font-size: 13px;
+    margin: 25px 0 12px;
+}
+
+.history {
+    overflow-y: auto;
+    flex: 1;
+}
+
+.chat-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 9px;
+    border-radius: 8px;
+    margin-bottom: 5px;
+}
+
+.chat-item.active { background: #30313a; }
+
+.chat-open {
+    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.delete-chat {
+    background: transparent;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    font-size: 17px;
+    padding: 5px;
+    border-radius: 5px;
+}
+
+.delete-chat:hover {
+    background: #563333;
+    color: #ff7777;
+}
+
+.sidebar-bottom {
+    border-top: 1px solid #333;
+    padding-top: 12px;
+}
+
+.theme-button {
+    width: 100%;
+    background: transparent;
+    color: white;
+    border: 1px solid #444;
+    padding: 11px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.topbar {
+    height: 65px;
+    border-bottom: 1px solid #30313a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 22px;
+}
+
+.topbar h2 { font-size: 19px; }
+
+.messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 25px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.welcome {
+    margin: auto;
+    text-align: center;
+}
+
+.welcome h1 {
+    font-size: 38px;
+    color: #9aaaff;
+}
+
+.welcome p { color: #aaa; }
+
+.message {
+    max-width: 80%;
+    padding: 14px 17px;
+    border-radius: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.user-message {
+    align-self: flex-end;
+    background: #343b58;
+}
+
+.ai-message {
+    align-self: flex-start;
+    background: #24262d;
+}
+
+.thinking {
+    color: #aaa;
+    font-style: italic;
+}
+
+.input-area {
+    padding: 18px;
+    border-top: 1px solid #30313a;
+}
+
+.input-box {
+    max-width: 850px;
+    margin: auto;
+    display: flex;
+    gap: 10px;
+    background: #25262d;
+    padding: 10px;
+    border: 1px solid #444;
+    border-radius: 15px;
+}
+
+textarea {
+    flex: 1;
+    background: transparent;
+    color: white;
+    border: none;
+    outline: none;
+    resize: none;
+    font-size: 16px;
+    padding: 9px;
+    max-height: 130px;
+    font-family: Arial, sans-serif;
+}
+
+.send-button {
+    background: #6578e8;
+    border: none;
+    color: white;
+    padding: 0 20px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 15px;
+}
+
+.send-button:hover { background: #5266d4; }
+
+.send-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+body.light {
+    background: #f5f5f7;
+    color: #222;
+}
+
+body.light .sidebar {
+    background: #e9e9ef;
+    border-color: #ddd;
+}
+
+body.light .new-chat,
+body.light .chat-item.active {
+    background: #d6d8e5;
+    color: #222;
+}
+
+body.light .topbar,
+body.light .input-area { border-color: #ddd; }
+
+body.light .ai-message {
+    background: #e6e6ec;
+    color: #222;
+}
+
+body.light .input-box {
+    background: white;
+    border-color: #ccc;
+}
+
+body.light textarea { color: #222; }
+body.light .theme-button { color: #222; }
+body.light .welcome p { color: #666; }
+body.light .thinking { color: #555; }
+
+@media(max-width:650px) {
+    .sidebar {
+        width: 190px;
+        padding: 10px;
+    }
+
+    .logo { font-size: 20px; }
+    .messages { padding: 15px; }
+    .message { max-width: 95%; }
+}
+</style>
+</head>
+
+<body>
+
+<aside class="sidebar">
+    <div class="logo">✦ VIRAT AI</div>
+
+    <button class="new-chat" onclick="newChat()">
+        + New Chat
+    </button>
+
+    <div class="history-title">YOUR CHATS</div>
+    <div class="history" id="history"></div>
+
+    <div class="sidebar-bottom">
+        <button class="theme-button" onclick="toggleTheme()">
+            🌙 / ☀️ Change Theme
+        </button>
+    </div>
+</aside>
+
+<main class="main">
+    <header class="topbar">
+        <h2>VIRAT AI</h2>
+        <span>AI Assistant</span>
+    </header>
+
+    <section class="messages" id="messages"></section>
+
+    <footer class="input-area">
+        <div class="input-box">
+            <textarea
+                id="userInput"
+                placeholder="Message VIRAT AI..."
+                rows="1"
+                onkeydown="handleKey(event)"
+            ></textarea>
+
+            <button
+                class="send-button"
+                id="sendButton"
+                onclick="sendMessage()"
+            >Send</button>
+        </div>
+    </footer>
+</main>
+
+<script>
+let chats = JSON.parse(localStorage.getItem("virat_chats") || "[]");
+let currentChatId = null;
+let isThinking = false;
+
+function saveChats() {
+    localStorage.setItem("virat_chats", JSON.stringify(chats));
+}
+
+function createChat() {
+    return {
+        id: Date.now().toString() + Math.random().toString(36).slice(2),
+        title: "New Chat",
+        messages: []
+    };
+}
+
+function newChat() {
+    if (isThinking) return;
+
+    const chat = createChat();
+    chats.unshift(chat);
+    currentChatId = chat.id;
+
+    saveChats();
+    renderAll();
+}
+
+function getCurrentChat() {
+    return chats.find(chat => chat.id === currentChatId);
+}
+
+// DELETE CHAT - FIXED
+function deleteChat(id) {
+    if (!confirm("Are you sure you want to delete this chat?")) {
+        return;
+    }
+
+    chats = chats.filter(chat => chat.id !== id);
+
+    if (currentChatId === id) {
+        currentChatId = null;
+    }
+
+    saveChats();
+    renderAll();
+}
+
+function openChat(id) {
+    if (isThinking) return;
+
+    currentChatId = id;
+    renderAll();
+}
+
+function renderHistory() {
+    const history = document.getElementById("history");
+    history.innerHTML = "";
+
+    chats.forEach(chat => {
+        const item = document.createElement("div");
+
+        item.className = "chat-item" +
+            (chat.id === currentChatId ? " active" : "");
+
+        const title = document.createElement("span");
+        title.className = "chat-open";
+        title.textContent = chat.title;
+        title.onclick = () => openChat(chat.id);
+
+        const deleteButton = document.createElement("button");
+        deleteButton.className = "delete-chat";
+        deleteButton.textContent = "🗑️";
+        deleteButton.title = "Delete chat";
+        deleteButton.onclick = () => deleteChat(chat.id);
+
+        item.appendChild(title);
+        item.appendChild(deleteButton);
+        history.appendChild(item);
+    });
+}
+
+function renderMessages() {
+    const container = document.getElementById("messages");
+    container.innerHTML = "";
+
+    const chat = getCurrentChat();
+
+    if (!chat || chat.messages.length === 0) {
+        const welcome = document.createElement("div");
+        welcome.className = "welcome";
+
+        welcome.innerHTML = `
+            <h1>✦ VIRAT AI</h1>
+            <p>How can I help you today?</p>
+        `;
+
+        container.appendChild(welcome);
+        return;
+    }
+
+    chat.messages.forEach(message => {
+        const div = document.createElement("div");
+
+        div.className = "message " +
+            (message.role === "user" ? "user-message" : "ai-message");
+
+        div.textContent = message.text;
+        container.appendChild(div);
+    });
+
+    if (isThinking && chat.id === currentChatId) {
+        const thinking = document.createElement("div");
+        thinking.className = "thinking";
+        thinking.textContent = "VIRAT AI is thinking...";
+        container.appendChild(thinking);
+    }
+
+    container.scrollTop = container.scrollHeight;
+}
+
+function renderAll() {
+    renderHistory();
+    renderMessages();
+}
+
+async function sendMessage() {
+    if (isThinking) return;
+
+    const input = document.getElementById("userInput");
+    const message = input.value.trim();
+
+    if (!message) return;
+
+    if (!currentChatId) {
+        const chat = createChat();
+        chats.unshift(chat);
+        currentChatId = chat.id;
+    }
+
+    const chat = getCurrentChat();
+
+    if (!chat) return;
+
+    if (chat.messages.length === 0) {
+        chat.title = message.length > 30
+            ? message.slice(0, 30) + "..."
+            : message;
+    }
+
+    chat.messages.push({
+        role: "user",
+        text: message
+    });
+
+    const assistantMessage = {
+        role: "assistant",
+        text: ""
+    };
+
+    chat.messages.push(assistantMessage);
+
+    input.value = "";
+    isThinking = true;
+
+    document.getElementById("sendButton").disabled = true;
+
+    saveChats();
+    renderAll();
+
+    // Stop waiting after 90 seconds if the server does not respond.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90000);
+
+    try {
+        const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ message }),
+            signal: controller.signal
+        });
+
+        if (!response.ok) {
+            let errorMessage = "Something went wrong.";
+
+            try {
+                const data = await response.json();
+                errorMessage = data.error || errorMessage;
+            } catch (e) {}
+
+            throw new Error(errorMessage);
+        }
+
+        if (!response.body) {
+            throw new Error("Streaming is not supported by this browser.");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+            const { value, done } = await reader.read();
+
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+
+            const events = buffer.split("\n\n");
+            buffer = events.pop();
+
+            for (const event of events) {
+                const lines = event.split("\n");
+                const dataLine = lines.find(line => line.startsWith("data: "));
+
+                if (!dataLine) continue;
+
+                const data = dataLine.slice(6);
+
+                if (data === "[DONE]") {
+                    continue;
+                }
+
+                const parsed = JSON.parse(data);
+
+                if (parsed.error) {
+                    throw new Error(parsed.error);
+                }
+
+                assistantMessage.text += parsed.text || "";
+
+                renderMessages();
+            }
+        }
+
+        if (!assistantMessage.text) {
+            assistantMessage.text = "I couldn't generate a reply.";
+        }
+
+    } catch (error) {
+        if (error.name === "AbortError") {
+            assistantMessage.text =
+                "VIRAT AI took too long to respond. Please try again.";
+        } else {
+            assistantMessage.text = "Sorry! " + error.message;
+        }
+
+    } finally {
+        clearTimeout(timeout);
+
+        isThinking = false;
+        document.getElementById("sendButton").disabled = false;
+
+        saveChats();
+        renderAll();
+    }
+}
+
+function handleKey(event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+    }
+}
+
+function toggleTheme() {
+    document.body.classList.toggle("light");
+
+    localStorage.setItem(
+        "virat_theme",
+        document.body.classList.contains("light") ? "light" : "dark"
+    );
+}
+
+if (localStorage.getItem("virat_theme") === "light") {
+    document.body.classList.add("light");
+}
+
+if (chats.length > 0) {
+    currentChatId = chats[0].id;
+} else {
+    const chat = createChat();
+    chats.push(chat);
+    currentChatId = chat.id;
+    saveChats();
+}
+
+renderAll();
+</script>
+
+</body>
+</html>
