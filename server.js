@@ -9,6 +9,13 @@ const PORT = process.env.PORT || 3000;
 const MODEL = "gemini-3.5-flash-lite";
 
 app.use(express.json());
+
+// Serve the homepage from the main project folder.
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "index.html"));
+});
+
+// Serve any additional frontend files from public.
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/health", (req, res) => {
@@ -28,7 +35,7 @@ app.post("/api/chat", async (req, res) => {
 
     if (!apiKey) {
         return res.status(500).json({
-            error: "Gemini API key is missing in .env"
+            error: "Gemini API key is missing."
         });
     }
 
@@ -80,15 +87,11 @@ app.post("/api/chat", async (req, res) => {
             console.error("Gemini API error:", details);
 
             if (response.status === 429) {
-                throw new Error(
-                    "Gemini quota reached. Please try again after it resets."
-                );
+                throw new Error("Gemini quota reached. Please try again later.");
             }
 
             if (response.status === 503) {
-                throw new Error(
-                    "Gemini is busy. Please try again shortly."
-                );
+                throw new Error("Gemini is busy. Please try again shortly.");
             }
 
             throw new Error(
@@ -190,5 +193,4 @@ app.post("/api/chat", async (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
     console.log("VIRAT AI is running!");
     console.log("Port:", PORT);
-    console.log("Open: http://localhost:" + PORT);
 });
