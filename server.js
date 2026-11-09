@@ -6,138 +6,109 @@ const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MODEL = "gemini-3.5-flash-lite";
 
-app.use(express.json());
+// Gemini model
+const MODEL = "gemini-3.8-flash";
 
-// Serve the homepage from the main project folder.
+app.use(express.json({ limit: "1mb" }));
+
+// Homepage: index.html in the main project folder
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// Serve any additional frontend files from public.
-app.use(express.static(path.join(__dirname, "public")));
-
+// Safe diagnostic check: never displays the actual API key
 app.get("/health", (req, res) => {
-    res.json({ status: "VIRAT AI server is running!" });
+    res.json({
+        status: "VIRAT AI server is running!",
+        geminiKeyConfigured: Boolean(process.env.GEMINI_API_KEY)
+    });
 });
 
+// Chat API
 app.post("/api/chat", async (req, res) => {
-    const message = req.body.message;
+    const message = req.body?.message;
 
-    if (!message || typeof message !== "string") {
+    if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({
+            error: "Gemini API key is missing. Check Render Environment settings."
+        });
+    }
+
+    if (typeof message !== "string" || !message.trim()) {
         return res.status(400).json({
             error: "Please enter a message."
         });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-        return res.status(500).json({
-            error: "Gemini API key is missing."
-        });
-    }
-
-    console.log("New message received:", message);
-
-    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders();
-
-    function sendEvent(data) {
-        if (!res.destroyed && !res.writableEnded) {
-            res.write("data: " + JSON.stringify(data) + "\n\n");
-        }
-    }
-
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
+    const timeout = setTimeout(() => controller.abort(), 80000);
 
     try {
-        console.log("Connecting to Gemini using", MODEL);
-
         const url =
             `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:streamGenerateContent?alt=sse`;
 
-        const response = await fetch(url, {
+        const geminiResponse = await fetch(url, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "x-goog-api-key": apiKey
+                "x-goog-api-key": process.env.GEMINI_API_KEY
             },
             body: JSON.stringify({
-                contents: [{
-                    parts: [{ text: message }]
-                }]
+                contents: [
+                    {
+                        role: "user",
+                        parts: [{ text: message.trim() }]
+                    }
+                ],
+                generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 1024
+                }
             }),
             signal: controller.signal
         });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            let details = {};
+        if (!geminiResponse.ok) {
+            const errorText = await geminiResponse.text();
+
+            let errorMessage = "Gemini API request failed.";
 
             try {
-                details = JSON.parse(errorText);
-            } catch (e) {}
-
-            console.error("Gemini API status:", response.status);
-            console.error("Gemini API error:", details);
-
-            if (response.status === 429) {
-                throw new Error("Gemini quota reached. Please try again later.");
+                const errorData = JSON.parse(errorText);
+                errorMessage =
+                    errorData.error?.message || errorMessage;
+            } catch (e) {
+                errorMessage = errorText || errorMessage;
             }
 
-            if (response.status === 503) {
-                throw new Error("Gemini is busy. Please try again shortly.");
-            }
-
-            throw new Error(
-                details.error?.message || "Gemini API request failed."
+            console.error(
+                "Gemini API error:",
+                geminiResponse.status,
+                errorMessage
             );
+
+            return res.status(502).json({
+                error: `Gemini error (${geminiResponse.status}): ${errorMessage}`
+            });
         }
 
-        if (!response.body) {
-            throw new Error("Gemini returned no response stream.");
+        if (!geminiResponse.body) {
+            return res.status(502).json({
+                error: "Gemini did not return a response stream."
+            });
         }
 
-        console.log("Gemini stream started!");
+        // Send streamed replies to the website
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache, no-transform");
+        res.setHeader("Connection", "keep-alive");
+        res.flushHeaders();
 
-        const reader = response.body.getReader();
+        const reader = geminiResponse.body.getReader();
         const decoder = new TextDecoder();
 
         let buffer = "";
-        let receivedText = false;
-
-        function processEvent(event) {
-            const data = event
-                .split("\n")
-                .filter(line => line.startsWith("data:"))
-                .map(line => line.slice(5).trim())
-                .join("\n");
-
-            if (!data || data === "[DONE]") return;
-
-            const result = JSON.parse(data);
-
-            if (result.error) {
-                throw new Error(
-                    result.error.message || "Gemini returned an error."
-                );
-            }
-
-            const parts =
-                result.candidates?.[0]?.content?.parts || [];
-
-            for (const part of parts) {
-                if (part.text) {
-                    receivedText = true;
-                    sendEvent({ text: part.text });
-                }
-            }
-        }
 
         while (true) {
             const { value, done } = await reader.read();
@@ -145,52 +116,67 @@ app.post("/api/chat", async (req, res) => {
             if (done) break;
 
             buffer += decoder.decode(value, { stream: true });
-            buffer = buffer.replace(/\r\n/g, "\n");
 
-            const events = buffer.split("\n\n");
-            buffer = events.pop();
+            const lines = buffer.split(/\r?\n/);
+            buffer = lines.pop() || "";
 
-            for (const event of events) {
-                processEvent(event);
+            for (const line of lines) {
+                if (!line.startsWith("data:")) continue;
+
+                const data = line.slice(5).trim();
+
+                if (!data || data === "[DONE]") continue;
+
+                try {
+                    const parsed = JSON.parse(data);
+
+                    const parts =
+                        parsed.candidates?.[0]?.content?.parts || [];
+
+                    for (const part of parts) {
+                        if (typeof part.text === "string") {
+                            res.write(
+                                `data: ${JSON.stringify({
+                                    text: part.text
+                                })}\n\n`
+                            );
+                        }
+                    }
+                } catch (error) {
+                    console.error("Could not parse Gemini stream chunk.");
+                }
             }
         }
 
-        buffer += decoder.decode();
-        buffer = buffer.replace(/\r\n/g, "\n");
-
-        if (buffer.trim()) {
-            processEvent(buffer);
-        }
-
-        if (!receivedText) {
-            throw new Error("Gemini returned an empty reply.");
-        }
-
-        sendEvent({ done: true });
-        console.log("Gemini finished replying!");
+        res.write("data: [DONE]\n\n");
+        res.end();
 
     } catch (error) {
-        console.error("GEMINI ERROR:", error);
+        console.error("Server error:", error.message);
 
-        let message = error.message ||
-            "VIRAT AI could not connect to Gemini.";
+        if (!res.headersSent) {
+            const status = error.name === "AbortError" ? 504 : 500;
 
-        if (error.name === "AbortError") {
-            message = "Gemini took too long to respond. Please try again.";
+            return res.status(status).json({
+                error: error.name === "AbortError"
+                    ? "Gemini took too long to respond. Please try again."
+                    : "Server error: " + error.message
+            });
         }
 
-        sendEvent({ error: message });
+        res.end();
 
     } finally {
         clearTimeout(timeout);
-
-        if (!res.destroyed && !res.writableEnded) {
-            res.end();
-        }
     }
 });
 
-app.listen(PORT, "0.0.0.0", () => {
+// Start server
+app.listen(PORT, () => {
     console.log("VIRAT AI is running!");
     console.log("Port:", PORT);
+    console.log(
+        "Gemini API key configured:",
+        Boolean(process.env.GEMINI_API_KEY)
+    );
 });
